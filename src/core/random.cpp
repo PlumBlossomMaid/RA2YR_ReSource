@@ -13,6 +13,7 @@
 
 #include "core/random.hpp"
 #include "system/scenario.hpp"
+#include "core/math.hpp"
 #include "core/reverse_marker.hpp"
 
 #include <cstdint>
@@ -156,6 +157,41 @@ int32_t Random::Range(Randomizer* rng, int32_t min, int32_t max)
     }
 
     return value + lower;  // 0x65C886: add eax,ebx
+}
+
+// IDA: 0x5980C0 -- Random::Gaussian (thiscall: ecx=state)
+// Marsaglia polar method over the uniform source pointed to by the state
+// object. Each accepted round produces TWO values; the second is cached and
+// returned on the next call — call parity changes RNG stream consumption,
+// so the cache is load-bearing. Rejection rounds consume extra draws.
+REVERSE(0x5980c0, "Random::Gaussian: Marsaglia polar normal deviate (cached pair)", "None")
+double Random::Gaussian(GaussianState* state)
+{
+    if (state->have_cached)
+    {
+        state->have_cached = 0;
+        return state->cached;
+    }
+
+    double u, v, s;
+    for (;;)
+    {
+        u = 2.0 * state->uniform() - 1.0;  // 0x5980E1: fadd st,st / fsub 1.0
+        v = 2.0 * state->uniform() - 1.0;
+        s = v * v + u * u;                 // order: v*v first, then + u*u
+        if (s < 1.0 && s != 0.0)           // reject outside the unit circle / dead center
+            break;
+    }
+
+    // 0x598126: fldln2 / fxch / fyl2x — the original's ln is a single x87
+    // instruction under the process-global PC=53/RC=chop; LogChop reproduces
+    // that value deterministically (exact ln chopped toward zero).
+    double l = Math::LogChop(s);
+    double f = Math::Sqrt((-l - l) / s);   // = sqrt(-2 ln s / s)
+
+    state->have_cached = 1;
+    state->cached = f * v;
+    return f * u;
 }
 
 } // namespace gamemd

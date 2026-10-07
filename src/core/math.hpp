@@ -213,4 +213,11 @@ namespace gamemd::Math
 double Sqrt(double x);    // 0x4CAC40
 double ArcTan(double x);  // 0x4CADE0
 
+// design: not a binary function — models the x87 `fyl2x` used inline at
+// 0x598126 (inside Random::Gaussian) under the process-global PC=53/RC=chop.
+// The real fyl2x is not correctly rounded (native x87 measurement: 7/20000
+// inputs land 1 ulp below the exact chopped value), so this implements the
+// unique deterministic semantics: exact ln(s) truncated toward zero to double.
+double LogChop(double s);
+
 } // namespace gamemd::Math

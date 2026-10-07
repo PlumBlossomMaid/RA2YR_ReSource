@@ -144090,8 +144090,8 @@
    "return_type": "double",
    "call_convention": "thiscall",
    "params": [],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },

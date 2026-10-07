@@ -3,6 +3,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <cfenv>
+#include <cmath>
+
+#include "dd_math.inl"
 
 namespace gamemd
 {
@@ -149,6 +153,50 @@ double ArcTan(double x)
 
     // 0x4CAE0E-0x4CAE1F: compare the NARROWED float against 0.0f; fchs only if x<0
     return (narrowed < 0.0f) ? -(double)r : (double)r;
+}
+
+// design: models the inline x87 `fyl2x` at 0x598126 (in Random::Gaussian).
+// Semantics: exact ln(s) truncated toward zero to double. Double-double
+// atanh series under round-to-nearest, then a manual chop toward zero.
+// Verified bit-identical to an arbitrary-precision model on 20000/20000
+// samples (ra2-reverse-AI build/scratch/dd_probe.cpp).
+double LogChop(double s)
+{
+    // TwoSum/Dekker splitting require round-to-nearest; the process runs
+    // chop-toward-zero (as the original does), so switch for the computation.
+    const int saved_round = std::fegetround();
+    std::fesetround(FE_TONEAREST);
+
+    // ln(s) = e*ln2 + ln(m) with s = m * 2^e, m reduced to [1/sqrt(2), sqrt(2))
+    int e = 0;
+    double m = std::frexp(s, &e);  // m in [0.5, 1)
+    if (m < 0.70710678118654752440)
+    {
+        m *= 2.0;
+        e -= 1;
+    }
+
+    // z = (m-1)/(m+1);  ln(m) = 2*atanh(z) = 2*(z + z^3/3 + z^5/5 + ...)
+    // |z| <= 0.1716, so 22 terms reach 2^-107. The coefficients 1/(2k+1) are
+    // not exact doubles, so the division is done in double-double too.
+    const dd::Dd z  = dd::Div(dd::Dd(m - 1.0, 0.0), dd::TwoSum(m, 1.0));
+    const dd::Dd z2 = dd::Mul(z, z);
+
+    dd::Dd acc(0.0, 0.0);
+    for (int k = 22; k >= 0; --k)
+        acc = dd::Add(dd::Mul(acc, z2), dd::Div(dd::Dd(1.0, 0.0), dd::Dd((double)(2 * k + 1), 0.0)));
+
+    const dd::Dd kLn2(6.9314718055994530942e-01, 2.3190468138462996e-17);
+    const dd::Dd l = dd::Add(dd::Mul(dd::Dd((double)e, 0.0), kLn2),
+                             dd::Mul(dd::Dd(2.0, 0.0), dd::Mul(z, acc)));
+
+    std::fesetround(saved_round);
+
+    // Manual chop toward zero: if lo has the opposite sign of hi, the exact
+    // value (hi+lo) is nearer to zero than hi, so hi sits one ulp too far out.
+    if (l.second != 0.0 && (l.first < 0.0) != (l.second < 0.0))
+        return std::nextafter(l.first, 0.0);
+    return l.first;
 }
 
 } // namespace gamemd::Math

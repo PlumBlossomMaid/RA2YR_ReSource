@@ -20,10 +20,21 @@ struct Randomizer;  // defined in system/scenario.hpp
 // 0x65C6D0 — R250 seeding (thiscall: ecx=this, [esp+4]=seed; ret 4)
 Randomizer* SeedInitRNG(Randomizer* rng, int32_t seed);
 
+// Gaussian noise generator state (gamemd.exe 0xABDFB8; layout confirmed by its
+// initializer 0x5980A0: clears the flag, zeroes both dwords of the cached
+// value, stores the uniform source pointer).
+struct GaussianState
+{
+    uint8_t  have_cached;      // +0x00
+    uint8_t  pad_01[7];        // +0x01..+0x07 alignment (unobserved)
+    double   cached;           // +0x08
+    double (*uniform)();       // +0x10 — uniform [0,1) source, init to 0x598000 (RandomState)
+};
+
 class Random
 {
 public:
-    static float Gaussian();  // 0x5980C0
+    static double Gaussian(GaussianState* state);  // 0x5980C0 (thiscall: ecx=state)
     static uint32_t State(Randomizer* rng);  // 0x65C780
     static int32_t Range(Randomizer* rng, int32_t min, int32_t max);  // 0x65C7E0
     // design: static function, no direct binary match in IDA
