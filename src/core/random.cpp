@@ -194,4 +194,34 @@ double Random::Gaussian(GaussianState* state)
     return f * u;
 }
 
+// IDA: 0x598030 -- Range_RandomInt (fastcall: ecx=lo, edx=hi; ret 0)
+REVERSE(0x598030, "Range_RandomInt: closed-interval uniform pick via global R250 (rejection sampling)", "None")
+int Range_RandomInt(int lo, int hi)
+{
+    // 0x598039-0x598056: span and base are written into the low half of a
+    // stack qword with the high half zeroed, then fild qword — both read as
+    // uint32 zero-extended to uint64 (a negative lo would become astronomical;
+    // known call sites all pass lo >= 0, replicate the width, don't "fix" it)
+    const double span = (double)(uint32_t)(hi - lo + 1);
+    const double base = (double)(uint32_t)lo;
+    for (;;)
+    {
+        // 0x598068: eax → qword low half, high half 0 → fild = uint32 zero-extension
+        const double u = (double)(uint64_t)Random::State(&g_Randomizer) * span
+                         * 2.3283064370807974e-10 + base;  // 0x7ED898 = 1/(2^32-1)
+        const int v = (int)(int64_t)u;  // 0x598082: call 0x7C5F00 (_ftol) — truncate, low 32 bits
+        if ((uint32_t)v <= (uint32_t)hi)  // 0x598089: ja — UNSIGNED comparison
+            return v;
+    }
+}
+
+// IDA: 0x5980A0 -- InitGaussianState (thiscall: ecx=state, [esp+4]=uniform; ret 4)
+REVERSE(0x5980a0, "InitGaussianState: clear have_cached + cached, store uniform source", "None")
+void InitGaussianState(GaussianState* state, double (*uniform)())
+{
+    state->have_cached = 0;  // 0x5980A7: byte [eax] = 0
+    state->cached = 0.0;     // 0x5980A4/0x5980A9: both dwords of +0x08 = 0
+    state->uniform = uniform;  // 0x5980B0: [eax+0x10] = arg0
+}
+
 } // namespace gamemd

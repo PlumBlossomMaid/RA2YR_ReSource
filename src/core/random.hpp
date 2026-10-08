@@ -20,6 +20,10 @@ struct Randomizer;  // defined in system/scenario.hpp
 // 0x65C6D0 — R250 seeding (thiscall: ecx=this, [esp+4]=seed; ret 4)
 Randomizer* SeedInitRNG(Randomizer* rng, int32_t seed);
 
+// 0x598030 — closed-interval uniform pick from the global R250 (fastcall:
+// ecx=lo, edx=hi; rejection sampling; ret 0)
+int Range_RandomInt(int lo, int hi);
+
 // Gaussian noise generator state (gamemd.exe 0xABDFB8; layout confirmed by its
 // initializer 0x5980A0: clears the flag, zeroes both dwords of the cached
 // value, stores the uniform source pointer).
@@ -30,6 +34,10 @@ struct GaussianState
     double   cached;           // +0x08
     double (*uniform)();       // +0x10 — uniform [0,1) source, init to 0x598000 (RandomState)
 };
+
+// 0x5980A0 — GaussianState initializer (thiscall: ecx=state, [esp+4]=uniform;
+// clears have_cached, zeroes both dwords of cached, stores the uniform source)
+void InitGaussianState(GaussianState* state, double (*uniform)());
 
 class Random
 {
