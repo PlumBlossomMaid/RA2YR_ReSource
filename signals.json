@@ -304028,8 +304028,8 @@
      "name": "p0"
     }
    ],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
@@ -304083,8 +304083,8 @@
      "name": "p1"
     }
    ],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
@@ -304195,8 +304195,8 @@
      "name": "p4"
     }
    ],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
@@ -307852,8 +307852,8 @@
    "return_type": "int *",
    "call_convention": "cdecl",
    "params": [],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
@@ -307864,8 +307864,8 @@
    "return_type": "unsigned int *",
    "call_convention": "cdecl",
    "params": [],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
@@ -309634,8 +309634,8 @@
    "return_type": "int",
    "call_convention": "unknown",
    "params": [],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
@@ -309670,8 +309670,8 @@
    "return_type": "unknown",
    "call_convention": "unknown",
    "params": [],
-   "completed": false,
-   "translated": false,
+   "completed": true,
+   "translated": true,
    "done": false,
    "idempotent": null
   },
