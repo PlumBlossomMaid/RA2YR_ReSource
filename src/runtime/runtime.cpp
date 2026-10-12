@@ -268,4 +268,103 @@ bool IsWin32NTPlatform(bool query_succeeded, std::uint32_t platform_id)
     return query_succeeded && platform_id == 2;
 }
 
+// IDA: 0x7D8DC8 -- __sptype (cdecl: double → eax)
+REVERSE(0x7d8dc8, "ClassifySpecialDouble: +inf→1/-inf→2/±qNaN→3/±sNaN→4/else→0（ClassifyDouble 内联链）", "None")
+int ClassifySpecialDouble(double value)
+{
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    const std::uint32_t highdword = (std::uint32_t)(bits >> 32);  // [ebp+0xc]
+    const std::uint32_t lowdword = (std::uint32_t)bits;          // [ebp+8]
+    if (highdword == 0x7FF00000u && lowdword == 0) return 1;    // +inf
+    if (highdword == 0xFFF00000u && lowdword == 0) return 2;    // -inf
+    const std::uint32_t highword = (std::uint32_t)(bits >> 48);  // [ebp+0xe]
+    if ((highword & 0x7FF8u) == 0x7FF8u) return 3;               // ±qNaN（尾数 quiet 位=1）
+    // sign=0、exp=0x7FF、quiet=0：尾数非零 → ±sNaN → 4
+    if ((highword & 0x7FF8u) == 0x7FF0u && ((highdword & 0x7FFFFu) != 0 || lowdword != 0)) return 4;
+    return 0;
+}
+
+// IDA: 0x7C8D20 -- __strcmpi (cdecl: const char* left, const char* right → eax)
+REVERSE(0x7c8d20, "StringCompareFolded: 内联 ASCII 折叠比较（A-Z→a-z），返回 -1/0/1", "None")
+int StringCompareFolded(const char* left, const char* right)
+{
+    const std::string_view l(left);
+    const std::string_view r(right);
+    std::size_t i = 0;
+    for (; i < l.size() && i < r.size(); ++i)
+    {
+        unsigned char lc = (unsigned char)l[i];
+        unsigned char rc = (unsigned char)r[i];
+        if (lc >= 'A' && lc <= 'Z') lc = (unsigned char)(lc + ('a' - 'A'));
+        if (rc >= 'A' && rc <= 'Z') rc = (unsigned char)(rc + ('a' - 'A'));
+        if (lc != rc) return lc < rc ? -1 : 1;
+    }
+    if (i < l.size()) return 1;
+    return i < r.size() ? -1 : 0;
+}
+
+// IDA: 0x7D46B9 -- _xtoa (cdecl: int value, char* output, int base, int signed_flag → output)
+REVERSE(0x7d46b9, "Xtoa: div 循环取余+反转（signed_flag!=0 写'-'取负；返回载体差异见头文件）", "None")
+std::string Xtoa(int value, int base, int signed_flag)
+{
+    std::string result;
+    unsigned int v;
+    if (signed_flag)
+    {
+        result += '-';
+        v = (unsigned int)(-value);  // 0x7D46CF: neg——INT_MIN 回绕与原版一致
+    }
+    else
+    {
+        v = (unsigned int)value;     // 0x7D46D3: 无符号位型直接转换
+    }
+    std::string digits;
+    do
+    {
+        const unsigned int rem = v % (unsigned int)base;
+        digits += (char)(rem > 9 ? rem + 0x57 : rem + 0x30);  // 0x7D46E8: 小写 a-f
+        v /= (unsigned int)base;
+    } while (v != 0);
+    for (std::size_t i = 0, j = digits.size() - 1; i < j; ++i, --j)  // 0x7D4702: 反转
+    {
+        const char t = digits[i];
+        digits[i] = digits[j];
+        digits[j] = t;
+    }
+    return result + digits;
+}
+
+// IDA: 0x7D468C -- __itoa (cdecl: int value, char* output, int base → output)
+REVERSE(0x7d468c, "Itoa: base==10 且 value<0 → signed_flag=1，尾调 Xtoa（返回载体差异见头文件）", "None")
+std::string Itoa(int value, int base)
+{
+    return Xtoa(value, base, (base == 10 && value < 0) ? 1 : 0);
+}
+
+// IDA: 0x7D6EA7 -- _TranslateName (cdecl: SearchEntry* entries, int last_index, const char* key, char*** output)
+REVERSE(0x7d6ea7, "BinarySearch: 按键排序数组二分查找，比较器=StringCompareFolded；命中→*output 指向 payload 字段（一槽两用拆参差异见头文件）", "None")
+void BinarySearch(SearchEntry* entries, int last_index, const char* key, char*** output)
+{
+    if (last_index < 0)
+        return;  // 0x7D6EB5: jl
+    const std::span<SearchEntry> view(entries, (std::size_t)last_index + 1);
+    int low = 0;
+    int high = last_index;
+    while (low <= high)
+    {
+        const int middle = low + (high - low) / 2;  // 0x7D6EBB-0x7D6EC8: cdq/sub/sar 折半
+        // 0x7D6ECA/0x7D6ED3：调用 __strcmpi(搜索 key, 条目 key)——搜索 key 在左
+        const int comparison = StringCompareFolded(key, view[middle].key);
+        if (comparison == 0)
+        {
+            *output = &view[middle].payload;  // 0x7D6EE6: 命中 → 输出指向 payload 字段
+            return;
+        }
+        if (comparison < 0)
+            high = middle - 1;
+        else
+            low = middle + 1;
+    }
+}
+
 } // namespace gamemd

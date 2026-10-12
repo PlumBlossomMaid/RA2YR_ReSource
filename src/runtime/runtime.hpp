@@ -89,4 +89,38 @@ std::uint32_t* DosErrorSlot();
 // （OS 调用无法在 oracle/无 OS 环境复现，platform_id 由调用方传入）。
 bool IsWin32NTPlatform(bool query_succeeded, std::uint32_t platform_id);
 
+// 0x7D8DC8 — __sptype (cdecl: double → eax)
+// binary64 特殊值分类：+inf→1 / -inf→2 / ±qNaN→3 / ±sNaN→4 / 其余→0。
+// 批 7 ClassifyDouble 在指数全 1 时内联的正是这条链。
+int ClassifySpecialDouble(double value);
+
+// 0x7C8D20 — __strcmpi (cdecl: const char* left, const char* right → eax)
+// 内联 ASCII 折叠比较（A-Z→a-z），返回 -1/0/1。
+int StringCompareFolded(const char* left, const char* right);
+
+// 0x7D46B9 — _xtoa (cdecl: int value, char* output, int base, int signed_flag → output)
+// **偏差（如实披露）**：原版写调用方 output 缓冲并返回其地址；移植返回
+// std::string（门控禁止对 char* 目标缓冲做下标写入，同 AssemblePath）。
+// signed_flag != 0 → 写 '-' 并取负；== 0 → 按无符号位型直接转换。
+std::string Xtoa(int value, int base, int signed_flag);
+
+// 0x7D468C — __itoa (cdecl: int value, char* output, int base → output)
+// 薄包装：signed_flag = (base == 10 && value < 0)，尾调 _xtoa。
+std::string Itoa(int value, int base);
+
+// 0x7D6EA7 — _TranslateName (cdecl: SearchEntry* entries, int last_index, const char* key, char*** output)
+// **上游名误判**：实为按键排序数组的二分查找。比较器 = __strcmpi（0x7C8D20）。
+// **偏差（如实披露）**：原版一槽两用——第 3 参是 char** 槽，输入时 *槽=key，
+// 命中时槽被改写为 &entries[middle].payload（C 源码里必有一次 char**→char* 的
+// 强制转换，门控禁止任何指针转换）。移植拆为 (key, output) 两参，语义不变：
+// 命中时 *output = &entries[middle].payload（output 指向调用方的 char** 槽）。
+// 原版第 4 参未使用。key/payload 用 char*（原版 C 风格，MSVC 6.0 字符串字面量即 char*）。
+struct SearchEntry
+{
+    char* key;      // +0x00
+    char* payload;  // +0x04
+};
+
+void BinarySearch(SearchEntry* entries, int last_index, const char* key, char*** output);
+
 } // namespace gamemd
